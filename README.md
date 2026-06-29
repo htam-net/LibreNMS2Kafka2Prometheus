@@ -118,3 +118,4 @@ https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/665d45df8dac0959fb29a
 
 ### Prometheus configuration
 
+https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/0ec4aa5f533f67ac4e42d5413f20ae71465f9fd3/prometheus.yaml#L1-L6
