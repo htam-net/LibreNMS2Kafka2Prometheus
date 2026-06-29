@@ -99,4 +99,4 @@ This is a basic configuration of LibreNMS to export Data into kafka topic
 
 Complete configuration of Vector : 
 
-https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/665d45df8dac0959fb29aa84406ba62fda393cd9/vector-Kafka2Prometheus4LibreNMS.yaml
+https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/665d45df8dac0959fb29aa84406ba62fda393cd9/vector-Kafka2Prometheus4LibreNMS.yaml#L1-L11
