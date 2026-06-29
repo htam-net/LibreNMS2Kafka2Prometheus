@@ -18,7 +18,7 @@ Settings : I use 3 servers (VMs running Debian Linux 13) :
 - One server for Kafka and Vector
 - One server for Prometheus (and Grafana not represented)
 
-:::mermaid
+```mermaid
 block-beta
     columns 1
 
@@ -46,7 +46,7 @@ block-beta
     vSink --> scraping
     scraping --> db
 
-:::
+```
 
 So LibreNMS is pushing data into a Kafka Topic.
 
