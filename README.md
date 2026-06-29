@@ -12,6 +12,12 @@ This is for now a Proof Of Concept (no resiliency is provied as of Now).
 
 Nota Bene : Please don't overlook the icons, this is just to illustrate (no link with the iconified technologies)
 
+Settings : I use 3 servers (VMs running Debian Linux 13) :
+
+- One server for LibreNMS
+- One server for Kafka and Vector
+- One server for Prometheus (and Grafana not represented)
+
 :::mermaid
 architecture-beta
     group gLibreNMS(logos:netuitive)[LibreNMS]
@@ -37,7 +43,16 @@ architecture-beta
     scraping:B --> T:db
 :::
 
-## Basic LibreNMS configuration for Kafka
+So LibreNMS is pushing data into a Kafka Topic.
+
+`Vector Kafka Source` is pulling data from this topic and passes all these to a bunch of `transform` and `routes` components of `Vector` to handle all the type of messages/events/metrics LibreNMS produces. These transforms also handle the modification/correction so thaht metrics can be read by `Prometheus Scraping` (Upercase metrics name or name with hyphen `-` are forbidden).
+All these metrics are concentrated into a single `prometheus exporter sink`.
+
+Then `Prometheus` scraping process will then get these metrics and store them.
+
+## Technical implementations and configurations
+
+### Basic LibreNMS configuration for Kafka
 
 This is a basic configuration of LibreNMS to export Data into kafka topic
 
@@ -95,8 +110,11 @@ This is a basic configuration of LibreNMS to export Data into kafka topic
 }
 ```
 
-## Vector Configuration 
+### Vector Configuration
 
-Complete configuration of Vector : 
+Complete configuration of Vector :
 
 https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/665d45df8dac0959fb29aa84406ba62fda393cd9/vector-Kafka2Prometheus4LibreNMS.yaml#L1-L11
+
+### Prometheus configuration
+
