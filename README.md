@@ -19,32 +19,28 @@ Settings : I use 3 servers (VMs running Debian Linux 13) :
 - One server for Prometheus (and Grafana not represented)
 
 ```mermaid
-block-beta
-    columns 1
+architecture-beta
+    group gLibreNMS(logos:netuitive)[LibreNMS]
+    service lnms(logos:aws-open-search)[LibreNMS]in gLibreNMS
 
-    LibreNMS("LibreNMS")   
-    space
-    Kafka("Kafka")
-    space
-    block:Vector
-   
-        vKafkaSource("Kafka Source")
-        vTransform("Transorms and routes")
-        vSink("Prometheus Exporter Sink")
-    end
-    space
-    block:Prometheus
-        scraping("Prometheus Scaper")
-        db("Prometheus Database")
-    end
-    LibreNMS --> Kafka
-    vKafkaSource --> Kafka
-    Kafka --> vKafkaSource
-    vKafkaSource --> vTransform
-    vTransform --> vSink
-    scraping --> vSink
-    vSink --> scraping
-    scraping --> db
+    group gKafka(logos:kafka)[Kafka]
+    service kafka(logos:aws-sns)[Kafka] in gKafka
+    
+    group vector(logos:vector)[Vector]
+    service vKafkaSource(logos:aws-cloudtrail)[Kafka Source] in vector
+    service vTransform(logos:aws-opsworks)[Transorm] in vector
+    service vSink(logos:aws-kinesis)[Prometheus Exporter Sink] in vector
+    
+    group prometheus(logos:prometheus)[Prometheus]
+    service scraping(logos:aws-appflow)[Prometheus Scaper] in prometheus
+    service db(logos:aws-timestream)[Prometheus Database] in prometheus
+
+    lnms:R --> L:kafka
+    vKafkaSource:L --> R:kafka
+    vKafkaSource:B --> T:vTransform
+    vTransform:B --> T:vSink
+    scraping:R --> L:vSink
+    scraping:B --> T:db
 
 ```
 
