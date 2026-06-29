@@ -19,28 +19,33 @@ Settings : I use 3 servers (VMs running Debian Linux 13) :
 - One server for Prometheus (and Grafana not represented)
 
 :::mermaid
-architecture-beta
-    group gLibreNMS(logos:netuitive)[LibreNMS]
-    service lnms(logos:aws-open-search)[LibreNMS]in gLibreNMS
+block-beta
+    columns 1
 
-    group gKafka(logos:kafka)[Kafka]
-    service kafka(logos:aws-sns)[Kafka] in gKafka
-    
-    group vector(logos:vector)[Vector]
-    service vKafkaSource(logos:aws-cloudtrail)[Kafka Source] in vector
-    service vTransform(logos:aws-opsworks)[Transorm] in vector
-    service vSink(logos:aws-kinesis)[Prometheus Exporter Sink] in vector
-    
-    group prometheus(logos:prometheus)[Prometheus]
-    service scraping(logos:aws-appflow)[Prometheus Scaper] in prometheus
-    service db(logos:aws-timestream)[Prometheus Database] in prometheus
+    LibreNMS("LibreNMS")   
+    space
+    Kafka("Kafka")
+    space
+    block:Vector
+   
+        vKafkaSource("Kafka Source")
+        vTransform("Transorms and routes")
+        vSink("Prometheus Exporter Sink")
+    end
+    space
+    block:Prometheus
+        scraping("Prometheus Scaper")
+        db("Prometheus Database")
+    end
+    LibreNMS --> Kafka
+    vKafkaSource --> Kafka
+    Kafka --> vKafkaSource
+    vKafkaSource --> vTransform
+    vTransform --> vSink
+    scraping --> vSink
+    vSink --> scraping
+    scraping --> db
 
-    lnms:R --> L:kafka
-    vKafkaSource:L --> R:kafka
-    vKafkaSource:B --> T:vTransform
-    vTransform:B --> T:vSink
-    scraping:R --> L:vSink
-    scraping:B --> T:db
 :::
 
 So LibreNMS is pushing data into a Kafka Topic.
@@ -118,4 +123,4 @@ https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/665d45df8dac0959fb29a
 
 ### Prometheus configuration
 
-https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/0ec4aa5f533f67ac4e42d5413f20ae71465f9fd3/prometheus.yaml#L1-L6
+https://github.com/htam-net/LibreNMS2Kafka2Prometheus/blob/0ec4aa5f533f67ac4e42d5413f20ae71465f9fd3/prometheus.yaml
