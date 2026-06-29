@@ -1,0 +1,940 @@
+
+data_dir: /tmp/vector
+api: 
+  enabled: true
+  address: "0.0.0.0:8686"
+schema:
+  # enabled: true
+  validation: true
+
+sources:
+  kafka_metrics_id:
+    type: kafka
+    bootstrap_servers: localhost:9092
+    group_id: group-de-vector
+    topics:
+      - mylibrenms
+
+  # vector_logs:
+  #   type: internal_logs
+  vector_metrics_id:
+    type: internal_metrics
+    scrape_interval_secs: 10
+
+transforms:
+  my_parse_metrics_id:
+    type: remap    
+    inputs:
+      - kafka_metrics_id # id of the kafka source 
+    source: |
+      . = parse_json!(.message)
+  
+  # Rewrite the measurement type to convert hyphen '-' into underscore '_'
+  my_rewrite_measurement_type_id :
+    type: remap
+    inputs:
+      - my_parse_metrics_id
+    source: >-
+      .measurement, err = replace(.measurement, pattern: s'-', with: s'_', count: -1)
+
+  my_route_metrics_id:
+    type: route
+    inputs:
+      - my_rewrite_measurement_type_id
+    route:      
+      poller_perf: .measurement == "poller_perf"
+      ports: .measurement == "ports"
+      icmp_route: .measurement == "icmp_perf"
+      uptime_route: .measurement == "uptime"
+      availability_route: .measurement == "availability"
+      cpu_route: .measurement == "ucd_cpu"
+      mempool_route: .measurement == "mempool"
+      storage_route: .measurement == "storage"      
+      netstats_icmp_route: .measurement == "netstats_icmp"
+      netstats_ip_route: .measurement == "netstats_ip"
+      netstats_ip_forward_route: .measurement == "netstats_ip_forward"
+      netstats_tcp_route: .measurement == "netstats_tcp"
+      netstats_udp_route: .measurement == "netstats_udp"
+      netstats_snmp_route: .measurement == "netstats_snmp"
+      processors_route: .measurement == "processors"
+      hr_processes_route: .measurement == "hr_processes"
+      hr_users_route: .measurement == "hr_users"
+      ipSystemStats_route: .measurement == "ipSystemStats"
+      ucd_diskio_route: .measurement == "ucd_diskio"
+      ucd_load_route: .measurement == "ucd_load"
+  
+  my_ucd_cpu_route_id:
+    type: route    
+    inputs:
+      - my_route_metrics_id.cpu_route
+    route:
+      ucd_route_non_oid_route: "!exists(.tags.oid)"
+      ucd_route_oid_route: "exists(.tags.oid)"
+  
+  # Value correction null --> 0
+  my_metrics_non_null_ports_id:
+    type: remap
+    drop_on_error: true
+    reroute_dropped: true
+    inputs:
+      - my_route_metrics_id.ports
+    # file: suppress_null.vrl
+    source: >-
+      .fields = map_values(object!(.fields)) -> |metrique_value| {
+        if is_null(metrique_value) {
+            metrique_value = 0            
+        } else {
+          metrique_value = metrique_value
+        }
+        metrique_value
+      }
+
+  my_metrics_ports_id:
+    type: log_to_metric
+    inputs:
+      - my_metrics_non_null_ports_id
+    metrics:
+      - name: "INOCTETS"
+        type: counter
+        field: "fields.INOCTETS"        
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - name: "OUTOCTETS"
+        type: counter
+        field: "fields.OUTOCTETS"        
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INERRORS"
+        name: "INERRORS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.OUTERRORS"
+        name: "OUTERRORS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INUCASTPKTS"
+        name: "INUCASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.OUTUCASTPKTS"
+        name: "OUTUCASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INNUCASTPKTS"
+        name: "INNUCASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.OUTNUCASTPKTS"
+        name: "OUTNUCASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INDISCARDS"
+        name: "INDISCARDS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.OUTDISCARDS"
+        name: "OUTDISCARDS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INUNKNOWNPROTOS"
+        name: "INUNKNOWNPROTOS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INBROADCASTPKTS"
+        name: "INBROADCASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.OUTBROADCASTPKTS"
+        name: "OUTBROADCASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.INMULTICASTPKTS"
+        name: "INMULTICASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: counter
+        field: "fields.OUTMULTICASTPKTS"
+        name: "OUTMULTICASTPKTS"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+          ifAlias: "{{tags.ifAlias}}"
+      - type: gauge
+        field: "fields.ifInUcastPkts_rate"
+        name: "ifInUcastPkts_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifOutUcastPkts_rate"
+        name: "ifOutUcastPkts_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifInErrors_rate"
+        name: "ifInErrors_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifOutErrors_rate"
+        name: "ifOutErrors_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifInOctets_rate"
+        name: "ifInOctets_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifOutOctets_rate"
+        name: "ifOutOctets_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifInBits_rate"
+        name: "ifInBits_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+      - type: gauge
+        field: "fields.ifOutBits_rate"
+        name: "ifOutBits_rate"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+  
+  # Value correction format module lowercase and '-' -> '_'
+  my_metrics_downcase_poller_perf_id:
+    type: remap
+    drop_on_error: true
+    reroute_dropped: true
+    inputs:
+      - my_route_metrics_id.poller_perf
+    # file: suppress_null.vrl
+    source: >-
+      .tags = map_values(object!(.tags)) -> |t_value| {
+        if is_string(t_value) {
+          t_value, err = downcase(t_value)        
+          t_value = replace(t_value, pattern: s'-', with: s'_', count: -1)        
+          t_value
+        } else {
+          t_value
+        }
+      }
+
+  my_metrics_poller_perf_id:
+    type: log_to_metric
+    inputs:
+      - my_metrics_downcase_poller_perf_id
+    metrics:      
+      - type: gauge
+        field: "fields.poller"
+        name: "poller_{{tags.module}}"
+        namespace: "{{measurement}}"
+        tags:
+          ifName: "{{tags.ifName}}"
+          hostname: "{{tags.hostname}}"
+
+  my_icmp_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.icmp_route
+    metrics:
+      - name: icmp_latency_avg
+        namespace: network
+        type: gauge
+        field: "fields.avg"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: icmp_latency_max
+        namespace: network
+        type: gauge
+        field: "fields.max"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: icmp_latency_min
+        namespace: network
+        type: gauge
+        field: "fields.min"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: icmp_packets_received
+        namespace: network
+        type: counter
+        field: "fields.rcv"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: icmp_packets_transmitted
+        namespace: network
+        type: counter
+        field: "fields.xmt"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_uptime_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.uptime_route
+    metrics:
+      - name: system_uptime_seconds
+        namespace: system
+        type: gauge
+        field: "fields.uptime"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_availability_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.availability_route
+    metrics:
+      - name: service_availability_percent
+        namespace: service
+        type: gauge
+        field: "fields.availability"
+        tags:
+          hostname: "{{tags.hostname}}"
+          window: "{{ name }}"
+  
+  my_mempool_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.mempool_route
+    metrics:
+      - name: memory_used_bytes
+        namespace: system
+        type: gauge
+        field: "fields.used"
+        tags:
+          hostname: "{{tags.hostname}}"
+          mempool_class: "{{ tags.mempool_class }}"
+          mempool_type: "{{ tags.mempool_type }}"
+      - name: memory_free_bytes
+        namespace: system
+        type: gauge
+        field: "fields.free"
+        tags:
+          hostname: "{{tags.hostname}}"
+          mempool_class: "{{ tags.mempool_class }}"
+          mempool_type: "{{ tags.mempool_type }}"
+  
+  my_storage_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.storage_route
+    metrics:
+      - name: storage_used_bytes
+        namespace: system
+        type: gauge
+        field: "fields.used"
+        tags:
+          hostname: "{{tags.hostname}}"
+          descr: "{{ tags.descr }}"
+          type: "{{ tags.type }}"
+      - name: storage_free_bytes
+        namespace: system
+        type: gauge
+        field: "fields.free"
+        tags:
+          hostname: "{{tags.hostname}}"
+          descr: "{{ tags.descr }}"
+          type: "{{ tags.type }}"
+
+  my_netstats_icmp_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.netstats_icmp_route
+    metrics:
+      - name: network_icmp_echo_reps_total
+        namespace: network
+        type: counter
+        field: "fields.icmpInEchoReps"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_icmp_echo_requests_total
+        namespace: network
+        type: counter
+        field: "fields.icmpInEchos"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_icmp_dest_unreachable_total
+        namespace: network
+        type: counter
+        field: "fields.icmpInDestUnreachs"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_netstats_ip_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.netstats_ip_route
+    metrics:
+      - name: network_ip_in_receives_total
+        namespace: network
+        type: counter
+        field: "fields.ipInReceives"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_ip_in_delivers_total
+        namespace: network
+        type: counter
+        field: "fields.ipInDelivers"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_ip_out_requests_total
+        namespace: network
+        type: counter
+        field: "fields.ipOutRequests"
+        tags:
+          hostname: "{{tags.hostname}}"
+  
+  my_netstats_ip_forward_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.netstats_ip_forward_route
+    metrics:
+      - name: network_ip_route_number_total
+        namespace: network
+        type: gauge
+        field: "fields.ipCidrRouteNumber"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_netstats_tcp_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.netstats_tcp_route
+    metrics:
+      - name: network_tcp_active_opens_total
+        namespace: network
+        type: counter
+        field: "fields.tcpActiveOpens"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_tcp_passive_opens_total
+        namespace: network
+        type: counter
+        field: "fields.tcpPassiveOpens"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_tcp_curr_estab
+        namespace: network
+        type: gauge
+        field: "fields.tcpCurrEstab"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_netstats_udp_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.netstats_udp_route
+    metrics:
+      - name: network_udp_in_datagrams_total
+        namespace: network
+        type: counter
+        field: "fields.udpInDatagrams"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: network_udp_out_datagrams_total
+        namespace: network
+        type: counter
+        field: "fields.udpOutDatagrams"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_netstats_snmp_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.netstats_snmp_route
+    metrics:
+      # Métriques pour les requêtes SNMP entrantes
+      - name: snmp_in_get_requests_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInGetRequests"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_get_nexts_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInGetNexts"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_set_requests_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInSetRequests"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_pkts_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInPkts"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_total_req_vars_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInTotalReqVars"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_total_set_vars_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInTotalSetVars"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_traps_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInTraps"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+      # Métriques pour les erreurs SNMP entrantes
+      - name: snmp_in_bad_versions_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInBadVersions"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_bad_community_names_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInBadCommunityN"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_bad_community_uses_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInBadCommunityU"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_bad_values_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInBadValues"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_asn_parse_errors_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInASNParseErrs"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_gen_errors_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInGenErrs"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_no_such_names_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInNoSuchNames"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_too_bigs_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInTooBigs"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_in_read_onlys_total
+        namespace: network
+        type: counter
+        field: "fields.snmpInReadOnlys"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+      # Métriques pour les réponses SNMP sortantes
+      - name: snmp_out_get_responses_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutGetResponses"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_get_nexts_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutGetNexts"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_set_requests_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutSetRequests"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_pkts_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutPkts"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_traps_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutTraps"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+      # Métriques pour les erreurs SNMP sortantes
+      - name: snmp_out_bad_values_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutBadValues"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_gen_errors_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutGenErrs"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_no_such_names_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutNoSuchNames"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_out_too_bigs_total
+        namespace: network
+        type: counter
+        field: "fields.snmpOutTooBigs"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+      # Métriques pour les drops SNMP
+      - name: snmp_proxy_drops_total
+        namespace: network
+        type: counter
+        field: "fields.snmpProxyDrops"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: snmp_silent_drops_total
+        namespace: network
+        type: counter
+        field: "fields.snmpSilentDrops"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_processors_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.processors_route
+    metrics:
+      - name: processor_usage
+        namespace: system
+        type: gauge
+        field: "fields.usage"
+        tags:
+          hostname: "{{tags.hostname}}"
+          processor_index: "{{ processor_index }}"
+          processor_type: "{{ processor_type }}"
+
+  my_hr_processes_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.hr_processes_route
+    metrics:
+      - name: system_processes_count
+        namespace: system
+        type: gauge
+        field: "fields.procs"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_hr_users_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.hr_users_route
+    metrics:
+      - name: system_users_count
+        namespace: system
+        type: gauge
+        field: "fields.users"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_ipSystemStats_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.ipSystemStats_route
+    metrics:
+      - name: network_ipv4_in_receives_total
+        namespace: network
+        type: counter
+        field: "fields.InReceives"
+        tags:
+          hostname: "{{tags.hostname}}"
+          af: "{{ tags.af }}"
+      - name: network_ipv4_in_delivers_total
+        namespace: network
+        type: counter
+        field: "fields.InDelivers"
+        tags:
+          hostname: "{{tags.hostname}}"
+          af: "{{ tags.af }}"
+      - name: network_ipv6_in_receives_total
+        namespace: network
+        type: counter
+        field: "fields.InReceives"
+        tags:
+          hostname: "{{tags.hostname}}"
+          af: "{{ tags.af }}"
+
+  my_ucd_diskio_metrics_id:
+    type: log_to_metric
+    inputs: 
+      - my_route_metrics_id.ucd_diskio_route
+    metrics:
+      - name: disk_read_bytes_total
+        namespace: system
+        type: counter
+        field: "fields.read"
+        tags:
+          hostname: "{{tags.hostname}}"
+          descr: "{{tags.descr}}"
+      - name: disk_written_bytes_total
+        namespace: system
+        type: counter
+        field: "fields.written"
+        tags:
+          hostname: "{{tags.hostname}}"
+          descr: "{{ tags.descr }}"
+      - name: disk_reads_total
+        namespace: system
+        type: counter
+        field: "fields.reads"
+        tags:
+          hostname: "{{tags.hostname}}"
+          descr: "{{tags.descr}}"
+      - name: disk_writes_total
+        namespace: system
+        type: counter
+        field: "fields.writes"
+        tags:
+          hostname: "{{tags.hostname}}"
+          descr: "{{tags.descr}}"
+
+  my_ucd_load_metrics_id:
+    type: log_to_metric
+    inputs: 
+    - my_route_metrics_id.ucd_load_route
+    metrics:
+      - name: system_load_1min
+        namespace: system
+        type: gauge
+        field: "fields.1min"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: system_load_5min
+        namespace: system
+        type: gauge
+        field: "fields.5min"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: system_load_15min
+        namespace: system
+        type: gauge
+        field: "fields.15min"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+  my_ucd_cpu_oid_id:
+    type: log_to_metric
+    inputs: 
+      - my_ucd_cpu_route_id.ucd_route_oid_route
+    metrics:
+      - name: ucd_metric
+        namespace: system
+        type: counter
+        field: "fields.value"
+        tags:
+          hostname: "{{tags.hostname}}"
+          oid: "{{tags.oid}}"
+
+  my_ucd_cpu_non_oid_id:
+    type: log_to_metric
+    inputs: 
+      - my_ucd_cpu_route_id.ucd_route_non_oid_route
+    metrics:
+      - name: cpu_idle
+        namespace: system
+        type: counter
+        field: "fields.idle"
+        tags:
+          hostname: "{{tags.hostname}}"          
+      - name: cpu_nice
+        namespace: system
+        type: gauge
+        field: "fields.nice"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: cpu_system
+        namespace: system
+        type: counter
+        field: "fields.system"
+        tags:
+          hostname: "{{tags.hostname}}"
+      - name: cpu_user
+        namespace: system
+        type: counter
+        field: "fields.user"
+        tags:
+          hostname: "{{tags.hostname}}"
+
+sinks:
+  # Rejoin all the routes and transforms into a single Prometheus Exporter Sink
+  my_sink_id:
+    type: prometheus_exporter
+    address: "0.0.0.0:9598"
+    inputs:
+      - my_metrics_ports_id
+      - my_metrics_poller_perf_id
+      - my_icmp_metrics_id
+      - my_uptime_metrics_id
+      - my_availability_metrics_id      
+      - my_mempool_metrics_id
+      - my_storage_metrics_id
+      - my_netstats_icmp_metrics_id
+      - my_netstats_ip_metrics_id
+      - my_netstats_tcp_metrics_id
+      - my_netstats_udp_metrics_id
+      - my_netstats_snmp_metrics_id
+      - my_processors_metrics_id
+      - my_hr_processes_metrics_id
+      - my_hr_users_metrics_id
+      - my_ipSystemStats_metrics_id
+      - my_ucd_diskio_metrics_id
+      - my_ucd_load_metrics_id      
+      - my_ucd_cpu_oid_id
+      - my_ucd_cpu_non_oid_id      
+  
+  # Dedicated Prometheus exporter to expose Vector own metrics
+  my_vector_prometheus_sink_id:
+    type: prometheus_exporter
+    address: "0.0.0.0:9599"
+    inputs:
+      - vector_metrics_id
+
+# The following sink are following troubleshooting
+  my_sink_metric_ports_file_id:
+    type: file
+    inputs:
+      - my_route_metrics_id.ports
+    encoding:
+      codec: json
+      framing:
+        method: newline_delimited
+    path: /tmp/vector/vector-metrics-ports-%Y-%m-%d.log
+
+  my_sink_metric_ports_non_null_file_id:
+    type: file
+    inputs:
+      - my_metrics_non_null_ports_id
+    encoding:
+      codec: json
+      framing:
+        method: newline_delimited
+    path: /tmp/vector/vector-metrics-ports-non_null-%Y-%m-%d.log
+  
+  my_sink_metric_poller-perf_file_id:
+    type: file
+    inputs:
+      - my_metrics_downcase_poller_perf_id
+    encoding:
+      codec: json
+      framing:
+        method: newline_delimited
+    path: /tmp/vector/vector-metrics-poller-perf-%Y-%m-%d.log
+  
+  my_sink_unmatched_file_id:
+    type: file
+    inputs:
+      - my_route_metrics_id._unmatched
+    encoding:
+      codec: json
+      framing:
+        method: newline_delimited
+    path: /tmp/vector/vector-metrics-route_unmatched-%Y-%m-%d.log
+
+  my_metric_vector_sink_console_id:
+    type: file
+    inputs:
+      - my_metrics_non_null_ports_id.dropped
+    encoding:
+      codec: json
+      framing:
+        method: newline_delimited
+    path: /tmp/vector/vector-dropped-%Y-%m-%d.log
+ 

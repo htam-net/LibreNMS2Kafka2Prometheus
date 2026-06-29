@@ -8,19 +8,40 @@ To achieve this, we use the data pipeline software, [Vector](https://vector.dev)
 
 This is for now a Proof Of Concept (no resiliency is provied as of Now).
 
-## Schema
+## Schema to illustrate
 
-```mermaid
-graph LR;
-    LibreNMS --> Kafka;
-    Kafka --> Vector;
-    Vector --> Prometheus;
-```
+Nota Bene : Please don't overlook the icons, this is just to illustrate (no link with the iconified technologies)
+
+:::mermaid
+architecture-beta
+    group gLibreNMS(logos:netuitive)[LibreNMS]
+    service lnms(logos:aws-open-search)[LibreNMS]in gLibreNMS
+
+    group gKafka(logos:kafka)[Kafka]
+    service kafka(logos:aws-sns)[Kafka] in gKafka
+    
+    group vector(logos:vector)[Vector]
+    service vKafkaSource(logos:aws-cloudtrail)[Kafka Source] in vector
+    service vTransform(logos:aws-opsworks)[Transorm] in vector
+    service vSink(logos:aws-kinesis)[Prometheus Exporter Sink] in vector
+    
+    group prometheus(logos:prometheus)[Prometheus]
+    service scraping(logos:aws-appflow)[Prometheus Scaper] in prometheus
+    service db(logos:aws-timestream)[Prometheus Database] in prometheus
+
+    lnms:R --> L:kafka
+    vKafkaSource:L --> R:kafka
+    vKafkaSource:B --> T:vTransform
+    vTransform:B --> T:vSink
+    scraping:R --> L:vSink
+    scraping:B --> T:db
+:::
 
 ## Basic LibreNMS configuration for Kafka
 
 This is a basic configuration of LibreNMS to export Data into kafka topic
-```
+
+```json
 {
     "enable": true,
     "debug": false,
@@ -73,3 +94,9 @@ This is a basic configuration of LibreNMS to export Data into kafka topic
     }
 }
 ```
+
+## Vector Configuration 
+
+Complete configuration of Vector : 
+
+
